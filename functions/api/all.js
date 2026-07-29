@@ -19,26 +19,40 @@ export async function onRequest(context) {
 // ─── Data fetchers ───
 
 async function fetchCNN() {
-  const today = new Date().toISOString().slice(0, 10);
-  const url = `https://production.dataviz.cnn.io/index/fearandgreed/graphdata/${today}`;
-  const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' } });
-  if (!res.ok) throw new Error('CNN fail');
-  const raw = await res.json();
-  const fg = raw.fear_and_greed || {};
-  return {
-    source: 'CNN', market: '美股', icon: '🇺🇸',
-    score: Math.round((fg.score || 50) * 10) / 10,
-    label: label(fg.score || 50),
-    components: [
-      { name: '标普500动量', score: raw.market_momentum_sp500?.score || 0 },
-      { name: '股价强度', score: raw.stock_price_strength?.score || 0 },
-      { name: '股价广度', score: raw.stock_price_breadth?.score || 0 },
-      { name: '看跌/看涨期权', score: raw.put_call_options?.score || 0 },
-      { name: 'VIX波动率', score: raw.market_volatility_vix?.score || 0 },
-      { name: '垃圾债券需求', score: raw.junk_bond_demand?.score || 0 },
-      { name: '避险需求', score: raw.safe_haven_demand?.score || 0 },
-    ],
-  };
+  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  // Try today first, fallback to yesterday
+  for (const date of [new Date().toISOString().slice(0, 10), yesterday]) {
+    try {
+      const url = `https://production.dataviz.cnn.io/index/fearandgreed/graphdata/${date}`;
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+          Accept: 'application/json',
+          Origin: 'https://edition.cnn.com',
+          Referer: 'https://edition.cnn.com/markets/fear-and-greed',
+        }
+      });
+      if (!res.ok) continue;
+      const raw = await res.json();
+      const fg = raw.fear_and_greed || {};
+      if (!fg.score) continue;
+      return {
+        source: 'CNN', market: '美股', icon: '🇺🇸',
+        score: Math.round((fg.score || 0) * 10) / 10,
+        label: label(fg.score),
+        components: [
+          { name: '标普500动量', score: raw.market_momentum_sp500?.score ?? 0 },
+          { name: '股价强度', score: raw.stock_price_strength?.score ?? 0 },
+          { name: '股价广度', score: raw.stock_price_breadth?.score ?? 0 },
+          { name: '看跌/看涨期权', score: raw.put_call_options?.score ?? 0 },
+          { name: 'VIX波动率', score: raw.market_volatility_vix?.score ?? 0 },
+          { name: '垃圾债券需求', score: raw.junk_bond_demand?.score ?? 0 },
+          { name: '避险需求', score: raw.safe_haven_demand?.score ?? 0 },
+        ],
+      };
+    } catch (e) { continue; }
+  }
+  return null;
 }
 
 async function fetchCrypto() {
