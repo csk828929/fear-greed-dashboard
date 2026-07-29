@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>全球市场恐贪指数 | Fear & Greed Index</title>
+<style>
+  :root {
+    --bg: #0a0e14; --card-bg: #141b22; --card-border: #1e2a36;
+    --text: #e0e6ed; --text-secondary: #7a8b9e;
+    --red: #e53e3e; --orange: #ed8936; --yellow: #ecc94b; --green: #48bb78; --dark-green: #38a169;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden;
+  }
+  .bg-grid {
+    position: fixed; top:0; left:0; width:100%; height:100%;
+    background-image: linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+    background-size: 60px 60px; pointer-events: none; z-index: 0;
+  }
+  .bg-orb {
+    position: fixed; border-radius: 50%; filter: blur(140px); opacity: 0.05; pointer-events: none; z-index: 0;
+    animation: orbFloat 20s ease-in-out infinite;
+  }
+  .bg-orb:nth-child(2) { top:5%; left:5%; width:500px; height:500px; background:#e53e3e; }
+  .bg-orb:nth-child(3) { bottom:10%; right:5%; width:400px; height:400px; background:#48bb78; animation-delay:-10s; }
+  @keyframes orbFloat { 0%,100%{transform:translate(0,0)} 50%{transform:translate(40px,-30px)} }
+
+  .container { position:relative; z-index:1; max-width:1400px; margin:0 auto; padding:20px 24px; }
+  .header { text-align:center; padding:36px 0 20px; }
+  .header h1 { font-size:2.2rem; font-weight:700; }
+  .subtitle { font-size:0.85rem; color:var(--text-secondary); margin-top:6px; letter-spacing:2px; }
+  .update-info { font-size:0.72rem; color:var(--text-secondary); margin-top:4px; opacity:0.7; }
+
+  .status-bar { display:flex; justify-content:center; align-items:center; gap:10px; margin-bottom:24px; }
+  .status-dot { width:8px; height:8px; border-radius:50%; background:var(--green); animation:pulse 2s infinite; }
+  .status-dot.error { background:var(--red); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  .status-text { font-size:0.76rem; color:var(--text-secondary); }
+
+  .market-overview { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:28px; }
+  @media (max-width:900px) { .market-overview { grid-template-columns:repeat(2,1fr); } }
+  @media (max-width:500px) { .market-overview { grid-template-columns:1fr; } }
+
+  .card {
+    background:var(--card-bg); border:1px solid var(--card-border); border-radius:16px;
+    padding:0; cursor:pointer; position:relative; overflow:hidden; transition:all 0.35s cubic-bezier(0.4,0,0.2,1);
+  }
+  .card:hover { border-color:rgba(255,255,255,0.18); transform:translateY(-3px); box-shadow:0 12px 40px rgba(0,0,0,0.4); }
+  .card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; z-index:1; }
+  .card[data-zone="extreme_fear"]::before { background:var(--red); box-shadow:0 0 20px rgba(229,62,62,0.4); }
+  .card[data-zone="fear"]::before { background:var(--orange); box-shadow:0 0 20px rgba(237,137,54,0.4); }
+  .card[data-zone="neutral"]::before { background:var(--yellow); box-shadow:0 0 20px rgba(236,201,75,0.4); }
+  .card[data-zone="greed"]::before { background:var(--green); box-shadow:0 0 20px rgba(72,187,120,0.4); }
+  .card[data-zone="extreme_greed"]::before { background:var(--dark-green); box-shadow:0 0 20px rgba(56,161,105,0.4); }
+  .card.expanded { grid-column:1/-1; }
+
+  .card-inner { padding:20px 16px 16px; }
+
+  .card-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:2px; }
+  .market-name { font-size:0.8rem; color:var(--text-secondary); display:flex; align-items:center; gap:5px; }
+  .market-icon { font-size:1.15rem; }
+  .expand-hint { font-size:0.58rem; color:var(--text-secondary); opacity:0.4; }
+
+  /* Gauge */
+  .gauge-wrap { display:flex; justify-content:center; margin:8px 0 4px; position:relative; }
+  .card-center { display:flex; flex-direction:column; align-items:center; }
+  .score-big { font-size:2.4rem; font-weight:800; line-height:1; }
+  .label-text { font-size:0.78rem; font-weight:600; padding:2px 12px; border-radius:12px; display:inline-block; margin:4px auto 0; }
+  .detail-info { font-size:0.66rem; color:var(--text-secondary); text-align:center; margin-top:4px; }
+
+  .zone-extreme_fear .score-big { color:var(--red); }
+  .zone-extreme_fear .label-text { background:rgba(229,62,62,0.15); color:var(--red); }
+  .zone-fear .score-big { color:var(--orange); }
+  .zone-fear .label-text { background:rgba(237,137,54,0.15); color:var(--orange); }
+  .zone-neutral .score-big { color:var(--yellow); }
+  .zone-neutral .label-text { background:rgba(236,201,75,0.15); color:#b8960f; }
+  .zone-greed .score-big { color:var(--green); }
+  .zone-greed .label-text { background:rgba(72,187,120,0.15); color:var(--green); }
+  .zone-extreme_greed .score-big { color:var(--dark-green); }
+  .zone-extreme_greed .label-text { background:rgba(56,161,105,0.15); color:var(--dark-green); }
+
+  /* Chart section */
+  .chart-section { display:none; margin:0; border-top:1px solid var(--card-border); padding:14px 16px 16px; }
+  .card.expanded .chart-section { display:block; }
+  .chart-tabs { display:flex; gap:4px; margin-bottom:10px; }
+  .chart-tab { padding:5px 14px; border-radius:6px; border:1px solid var(--card-border); background:transparent; color:var(--text-secondary); cursor:pointer; font-size:0.76rem; transition:all 0.2s; }
+  .chart-tab:hover { border-color:rgba(255,255,255,0.25); }
+  .chart-tab.active { background:rgba(255,255,255,0.08); color:var(--text); border-color:rgba(255,255,255,0.3); }
+  .chart-wrap { width:100%; height:300px; position:relative; }
+  .chart-wrap canvas { width:100%!important; height:100%!important; }
+  .chart-loading { display:flex; align-items:center; justify-content:center; height:100%; color:var(--text-secondary); font-size:0.82rem; }
+
+  .indicators { display:none; margin:0 16px 14px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.06); }
+  .card.expanded .indicators { display:block; }
+  .ind-row { display:flex; justify-content:space-between; align-items:center; padding:5px 0; border-bottom:1px solid rgba(255,255,255,0.03); font-size:0.76rem; }
+  .ind-name { color:var(--text-secondary); min-width:80px; }
+  .ind-bar { flex:1; height:4px; margin:0 10px; border-radius:2px; background:var(--card-border); overflow:hidden; }
+  .ind-fill { height:100%; border-radius:2px; transition:width 0.6s; }
+  .ind-val { font-size:0.7rem; min-width:24px; text-align:right; font-weight:600; }
+
+  .footer { text-align:center; padding:20px; color:var(--text-secondary); }
+  .footer .data-source { font-size:0.65rem; opacity:0.4; margin-bottom:14px; }
+  .advice-grid { display:flex; justify-content:center; gap:10px; flex-wrap:wrap; max-width:1100px; margin:0 auto; }
+  .advice-item { background:var(--card-bg); border:1px solid var(--card-border); border-radius:10px; padding:10px 14px; min-width:180px; flex:1; }
+  .advice-dot { width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:6px; }
+  .advice-label { font-size:0.73rem; font-weight:600; margin-bottom:4px; }
+  .advice-text { font-size:0.68rem; opacity:0.7; line-height:1.4; }
+  .disclaimer { font-size:0.6rem; opacity:0.35; margin-top:14px; }
+</style>
+</head>
+<body>
+<div class="bg-grid"></div><div class="bg-orb"></div><div class="bg-orb"></div>
+<div class="container">
+  <header class="header">
+    <h1>🌍 全球市场恐贪指数</h1>
+    <p class="subtitle">FEAR & GREED INDEX</p>
+    <p class="update-info" id="updateTime">正在加载...</p>
+  </header>
+  <div class="status-bar">
+    <div class="status-dot" id="statusDot"></div>
+    <span class="status-text" id="statusText">连接中...</span>
+  </div>
+  <div class="market-overview" id="marketGrid"></div>
+  <footer class="footer">
+    <p class="data-source">CNN · CoinMarketCap · onoff.markets · 新浪 · 腾讯</p>
+    <div class="advice-grid">
+      <div class="advice-item">
+        <div class="advice-label"><span class="advice-dot" style="background:#e53e3e"></span>极度恐惧 0–25</div>
+        <div class="advice-text">别人恐惧我贪婪。历史底部区域，可考虑分批布局。</div>
+      </div>
+      <div class="advice-item">
+        <div class="advice-label"><span class="advice-dot" style="background:#ed8936"></span>恐惧 26–45</div>
+        <div class="advice-text">市场谨慎避险。逢低关注优质资产，控制节奏。</div>
+      </div>
+      <div class="advice-item">
+        <div class="advice-label"><span class="advice-dot" style="background:#ecc94b"></span>中性 46–55</div>
+        <div class="advice-text">方向不明朗。多看少动，观望为主，等待信号。</div>
+      </div>
+      <div class="advice-item">
+        <div class="advice-label"><span class="advice-dot" style="background:#48bb78"></span>贪婪 56–75</div>
+        <div class="advice-text">市场情绪乐观。注意控制仓位，逐步兑现利润。</div>
+      </div>
+      <div class="advice-item">
+        <div class="advice-label"><span class="advice-dot" style="background:#38a169"></span>极度贪婪 76–100</div>
+        <div class="advice-text">别人贪婪我恐惧。历史顶部区域，可考虑减仓观望。</div>
+      </div>
+    </div>
+    <p class="disclaimer">⚠️ 仅供参考，不构成投资建议</p>
+  </footer>
+</div>
+
+<script>
+const API = '';
+const MARKETS = ['us','ashare','hk','gold','crypto','usbonds','cnbonds'];
+const NAMES = { us:'美股',ashare:'A股',hk:'港股',gold:'黄金',crypto:'加密货币',usbonds:'美国国债',cnbonds:'中国国债' };
+const ICONS = { us:'🇺🇸',ashare:'🇨🇳',hk:'🇭🇰',gold:'🥇',crypto:'₿',usbonds:'🇺🇸📜',cnbonds:'🇨🇳📜' };
+const N2K = { '美股':'us','A股':'ashare','港股':'hk','黄金':'gold','加密货币':'crypto','美国国债':'usbonds','中国国债':'cnbonds' };
+
+let expanded = null, allData = {};
+
+function zone(s) { return s<=25?'extreme_fear':s<=45?'fear':s<=55?'neutral':s<=75?'greed':'extreme_greed'; }
+function clr(s) { return s<=25?'#e53e3e':s<=45?'#ed8936':s<=55?'#ecc94b':s<=75?'#48bb78':'#38a169'; }
+
+function gaugeSVG(score, uid) {
+  const cx=85, cy=75, R=62;
+  const deg = (score/100)*180 - 90;
+
+  return `<svg viewBox="0 0 170 100" width="170" height="100">
+    <defs>
+      <linearGradient id="gg_${uid}" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%" stop-color="#e53e3e"/><stop offset="25%" stop-color="#ed8936"/>
+        <stop offset="50%" stop-color="#ecc94b"/><stop offset="75%" stop-color="#48bb78"/>
+        <stop offset="100%" stop-color="#38a169"/>
+      </linearGradient>
+    </defs>
+    <!-- Track -->
+    <path d="M ${cx-R} ${cy} A ${R} ${R} 0 0 1 ${cx+R} ${cy}"
+      fill="none" stroke="#1e2a36" stroke-width="12" stroke-linecap="round"/>
+    <!-- Colored arc -->
+    <path d="M ${cx-R} ${cy} A ${R} ${R} 0 0 1 ${cx+R} ${cy}"
+      fill="none" stroke="url(#gg_${uid})" stroke-width="10" stroke-linecap="round" opacity="0.35"/>
+    <!-- Needle -->
+    <g style="transform:rotate(${deg.toFixed(1)}deg);transform-origin:${cx}px ${cy}px;transition:transform 1s ease">
+      <line x1="${cx}" y1="${cy}" x2="${cx}" y2="${cy-R+6}" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="${cx}" cy="${cy}" r="4" fill="#fff"/>
+    </g>
+  </svg>`;
+}
+
+function cardHTML(market, data) {
+  const s = data?.score ?? 50, l = data?.label ?? '加载中', z = zone(s);
+  const detail = data?.index_name ? `${data.index_name}: ${data.index_price?.toLocaleString()}` :
+    data?.price ? `TLT: $${data.price}` : market==='us' ? 'CNN 官方 · 7项指标' : '';
+  const comps = data?.components;
+  let inds = '';
+  if (comps) {
+    let arr = Array.isArray(comps) ? comps : Object.entries(comps).map(([k,v])=> (typeof v==='object'?{name:k,score:v.score||v,rating:v.rating||''}:{name:k,score:v}));
+    inds = '<div class="indicators">'+arr.map(c=>`
+      <div class="ind-row"><span class="ind-name">${c.name}</span><div class="ind-bar"><div class="ind-fill" style="width:${c.score}%;background:${clr(c.score)}"></div></div><span class="ind-val" style="color:${clr(c.score)}">${Math.round(c.score)}</span></div>
+    `).join('')+'</div>';
+  }
+  return `<div class="card zone-${z}" data-zone="${z}" data-market="${market}">
+    <div class="card-inner">
+      <div class="card-header"><span class="market-name"><span class="market-icon">${ICONS[market]}</span>${NAMES[market]}</span><span class="expand-hint">点击展开 ▼</span></div>
+      <div class="gauge-wrap">${gaugeSVG(s, market)}</div>
+      <div class="card-center"><div class="score-big">${Math.round(s)}</div><div class="label-text">${l}</div><div class="detail-info">${detail}</div></div>
+      ${inds}
+    </div>
+    <div class="chart-section">
+      <div class="chart-tabs">
+        <button class="chart-tab" data-period="30">1个月</button>
+        <button class="chart-tab" data-period="365">1年</button>
+        <button class="chart-tab" data-period="1095">3年</button>
+      </div>
+      <div class="chart-wrap"><canvas></canvas><div class="chart-loading">点击上方时间范围加载趋势图</div></div>
+    </div>
+  </div>`;
+}
+
+function render() {
+  document.getElementById('marketGrid').innerHTML = MARKETS.map(m => cardHTML(m, allData[m])).join('');
+  document.querySelectorAll('.card').forEach(card => {
+    card.onclick = async e => {
+      if (e.target.closest('.chart-tab')) return;
+      const m = card.dataset.market;
+      if (expanded === m) { card.classList.remove('expanded'); expanded = null; return; }
+      document.querySelectorAll('.card').forEach(c => c.classList.remove('expanded'));
+      card.classList.add('expanded'); expanded = m;
+      card.querySelectorAll('.chart-tab').forEach(t => t.classList.remove('active'));
+      await loadChart(m, 30, card);
+    };
+    card.querySelectorAll('.chart-tab').forEach(tab => {
+      tab.onclick = async e => {
+        e.stopPropagation();
+        const period = parseInt(tab.dataset.period);
+        card.querySelectorAll('.chart-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        await loadChart(card.dataset.market, period, card);
+      };
+    });
+  });
+}
+
+async function loadChart(market, days, card) {
+  const canvas = card.querySelector('canvas');
+  const loading = card.querySelector('.chart-loading');
+  loading.style.display = 'flex'; canvas.style.display = 'none';
+  try {
+    const r2 = await fetch(`/api/${market}/history?days=${days}`);
+    const history = await r2.json();
+    if (!history?.length) throw new Error('无数据');
+    const scores = history.map(h=>h.score), dates = history.map(h=>h.date);
+    const labels = dates.map(d => {
+      const dt = new Date(d);
+      if (days<=60) return `${dt.getMonth()+1}/${dt.getDate()}`;
+      if (days<=400) return `${dt.getFullYear()}/${dt.getMonth()+1}`;
+      return `${dt.getFullYear()}`;
+    });
+    drawChart(canvas, labels, scores, clr(allData[market]?.score||50));
+    loading.style.display = 'none'; canvas.style.display = 'block';
+  } catch(e) { loading.textContent = '暂无历史数据'; }
+}
+
+function drawChart(canvas, labels, scores, lineColor) {
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio||1;
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const W=rect.width*dpr, H=300*dpr;
+  canvas.width=W; canvas.height=H; canvas.style.width=rect.width+'px'; canvas.style.height='300px';
+  ctx.scale(dpr,dpr);
+  const w=rect.width, h=300;
+  const pad={top:16,right:16,bottom:28,left:38};
+  const pw=w-pad.left-pad.right, ph=h-pad.top-pad.bottom;
+  const min=Math.floor(Math.min(...scores)/5)*5-5, max=Math.ceil(Math.max(...scores)/5)*5+5;
+  const range=max-min||1;
+  const x=i=>pad.left+(i/(scores.length-1))*pw;
+  const y=v=>pad.top+ph-((v-min)/range)*ph;
+
+  ctx.clearRect(0,0,w,h);
+
+  // Grid
+  ctx.strokeStyle='rgba(255,255,255,0.04)'; ctx.lineWidth=0.5;
+  const yStep=Math.max(5,Math.round(range/6));
+  for(let v=min;v<=max;v+=yStep) {
+    const yy=y(v);
+    ctx.beginPath(); ctx.moveTo(pad.left,yy); ctx.lineTo(w-pad.right,yy); ctx.stroke();
+    ctx.fillStyle='#7a8b9e'; ctx.font='10px sans-serif'; ctx.textAlign='right';
+    ctx.fillText(Math.round(v),pad.left-4,yy+3);
+  }
+
+  // Zone bands
+  [{lo:75,hi:100,c:'rgba(56,161,105,0.06)'},{lo:55,hi:75,c:'rgba(72,187,120,0.04)'},{lo:0,hi:25,c:'rgba(229,62,62,0.06)'},{lo:25,hi:45,c:'rgba(237,137,54,0.04)'}]
+    .forEach(z=>{ctx.fillStyle=z.c;ctx.fillRect(pad.left,y(Math.min(z.hi,max)),pw,y(Math.max(z.lo,min))-y(Math.min(z.hi,max)))});
+
+  // X labels
+  ctx.fillStyle='#7a8b9e'; ctx.font='9px sans-serif'; ctx.textAlign='center';
+  const step=Math.max(1,Math.floor(labels.length/10));
+  for(let i=0;i<labels.length;i+=step) ctx.fillText(labels[i],x(i),h-pad.bottom+14);
+
+  // Area fill
+  const grad=ctx.createLinearGradient(0,pad.top,0,h-pad.bottom);
+  grad.addColorStop(0,lineColor+'30'); grad.addColorStop(1,lineColor+'00');
+  ctx.beginPath(); ctx.moveTo(x(0),y(scores[0]));
+  for(let i=1;i<scores.length;i++) ctx.lineTo(x(i),y(scores[i]));
+  ctx.lineTo(x(scores.length-1),h-pad.bottom); ctx.lineTo(x(0),h-pad.bottom);
+  ctx.closePath(); ctx.fillStyle=grad; ctx.fill();
+
+  // Line
+  ctx.beginPath(); ctx.moveTo(x(0),y(scores[0]));
+  for(let i=1;i<scores.length;i++) ctx.lineTo(x(i),y(scores[i]));
+  ctx.strokeStyle=lineColor; ctx.lineWidth=2.5; ctx.lineJoin='round'; ctx.stroke();
+
+  // Dots
+  const dotStep=Math.max(1,Math.floor(scores.length/28));
+  for(let i=0;i<scores.length;i+=dotStep) {
+    ctx.beginPath(); ctx.arc(x(i),y(scores[i]),3,0,Math.PI*2);
+    ctx.fillStyle=lineColor; ctx.fill();
+    ctx.beginPath(); ctx.arc(x(i),y(scores[i]),1.5,0,Math.PI*2);
+    ctx.fillStyle='#141b22'; ctx.fill();
+  }
+}
+
+async function fetchAll() {
+  const dot=document.getElementById('statusDot'), txt=document.getElementById('statusText');
+  dot.className='status-dot'; txt.textContent='更新中...';
+  try {
+    const r=await fetch(`/api/all`,{signal:AbortSignal.timeout(25000)});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const res=await r.json();
+    allData={};
+    for(const m of res.markets||[]) { const k=N2K[m.market]; if(k) allData[k]=m; }
+    render();
+    const n=new Date();
+    document.getElementById('updateTime').textContent=`最后更新: ${n.toLocaleTimeString('zh-CN')} · 每5分钟自动刷新`;
+    dot.className='status-dot'; txt.textContent=`更新成功 · ${n.toLocaleTimeString('zh-CN')}`;
+  } catch(e) {
+    dot.className='status-dot error'; txt.textContent='连接失败，请确保后端服务已启动 (python server.py)';
+  }
+}
+fetchAll(); setInterval(fetchAll,300000);
+</script>
+</body>
+</html>

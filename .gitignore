@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+server.log
+cnn_cache.json
+.env
+.workbuddy/
