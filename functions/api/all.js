@@ -6,8 +6,10 @@ export async function onRequest(context) {
   };
   if (context.request.method === 'OPTIONS') return new Response(null, { status: 204, headers });
 
+  const cmcKey = context.env.CMC_API_KEY || '';
+
   const results = await Promise.allSettled([
-    fetchCNN(), fetchCrypto(), fetchGold(), fetchUSBonds(),
+    fetchCNN(), fetchCrypto(cmcKey), fetchGold(), fetchUSBonds(),
     fetchChina('ashare', 'sh000001', 'A股', '🇨🇳'),
     fetchChina('hk', 'hkHSI', '港股', '🇭🇰'),
     fetchChina('cnbonds', 'sh000012', '中国国债', '🇨🇳📜'),
@@ -55,11 +57,10 @@ async function fetchCNN() {
   return null;
 }
 
-async function fetchCrypto() {
-  const key = context.env.CMC_API_KEY || '';
-  if (!key) return null;
+async function fetchCrypto(apiKey) {
+  if (!apiKey) return null;
   const res = await fetch('https://pro-api.coinmarketcap.com/v3/fear-and-greed/latest', {
-    headers: { 'X-CMC_PRO_API_KEY': key, Accept: 'application/json' }
+    headers: { 'X-CMC_PRO_API_KEY': apiKey, Accept: 'application/json' }
   });
   if (!res.ok) return null;
   const data = (await res.json()).data || {};
