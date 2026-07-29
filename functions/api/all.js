@@ -72,13 +72,13 @@ async function fetchCrypto(apiKey) {
     } catch (e) {}
   }
 
-  // Fetch BTC kline for factor computation (Binance)
+  // Fetch BTC price history via CoinGecko for factor computation
   try {
-    const kres = await fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=60');
-    if (kres.ok) {
-      const klines = await kres.json();
-      const prices = klines.map(k => parseFloat(k[4])); // close prices
-      const volumes = klines.map(k => parseFloat(k[5]));
+    const cgres = await fetch('https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=60');
+    if (cgres.ok) {
+      const cg = await cgres.json();
+      const prices = (cg.prices || []).map(p => p[1]);
+      const volumes = (cg.total_volumes || []).map(v => v[1]);
       if (prices.length >= 20 && cmcResult) {
         const factors = computeCN(prices, volumes, prices[prices.length - 1]);
         cmcResult.components = factors.components;
