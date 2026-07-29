@@ -227,16 +227,23 @@ def fetch_crypto_fear_greed() -> dict:
                 "timestamp": fng.get("timestamp"),
                 "updated": datetime.now().isoformat(),
             }
-            # Add BTC price factors via CoinGecko
+            # Add BTC price factors (Binance → CoinGecko)
             try:
-                kr = requests.get("https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=60", timeout=10)
+                prices = volumes = []
+                kr = requests.get("https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=60", timeout=10)
                 if kr.status_code == 200:
-                    cg = kr.json()
-                    prices = [p[1] for p in (cg.get("prices") or [])]
-                    volumes = [v[1] for v in (cg.get("total_volumes") or [])]
-                    if len(prices) >= 20:
-                        factors = _compute_sentiment(prices, volumes)
-                        result["components"] = factors.get("components", {})
+                    klines = kr.json()
+                    prices = [float(k[4]) for k in klines]
+                    volumes = [float(k[5]) for k in klines]
+                else:
+                    cgr = requests.get("https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=60", timeout=10)
+                    if cgr.status_code == 200:
+                        cg = cgr.json()
+                        prices = [p[1] for p in (cg.get("prices") or [])]
+                        volumes = [v[1] for v in (cg.get("total_volumes") or [])]
+                if len(prices) >= 20:
+                    factors = _compute_sentiment(prices, volumes)
+                    result["components"] = factors.get("components", {})
             except Exception:
                 pass
             cache_set("crypto_fng", result)
