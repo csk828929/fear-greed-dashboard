@@ -58,14 +58,36 @@ async function fetchCNN() {
 }
 
 async function fetchCrypto(apiKey) {
-  if (!apiKey) return null;
-  const res = await fetch('https://pro-api.coinmarketcap.com/v3/fear-and-greed/latest', {
-    headers: { 'X-CMC_PRO_API_KEY': apiKey, Accept: 'application/json' }
-  });
-  if (!res.ok) return null;
-  const data = (await res.json()).data || {};
-  const map = { 'Extreme Fear': '极度恐惧', Fear: '恐惧', Neutral: '中性', Greed: '贪婪', 'Extreme Greed': '极度贪婪' };
-  return { source: 'CoinMarketCap', market: '加密货币', icon: '₿', score: data.value || 50, label: map[data.value_classification] || data.value_classification };
+  let cmcResult = null;
+  if (apiKey) {
+    try {
+      const res = await fetch('https://pro-api.coinmarketcap.com/v3/fear-and-greed/latest', {
+        headers: { 'X-CMC_PRO_API_KEY': apiKey, Accept: 'application/json' }
+      });
+      if (res.ok) {
+        const d = (await res.json()).data || {};
+        const map = { 'Extreme Fear': '极度恐惧', Fear: '恐惧', Neutral: '中性', Greed: '贪婪', 'Extreme Greed': '极度贪婪' };
+        cmcResult = { source: 'CoinMarketCap', market: '加密货币', icon: '₿', score: d.value || 50, label: map[d.value_classification] || d.value_classification };
+      }
+    } catch (e) {}
+  }
+
+  // Fetch BTC kline for factor computation (Binance)
+  try {
+    const kres = await fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=60');
+    if (kres.ok) {
+      const klines = await kres.json();
+      const prices = klines.map(k => parseFloat(k[4])); // close prices
+      const volumes = klines.map(k => parseFloat(k[5]));
+      if (prices.length >= 20 && cmcResult) {
+        const factors = computeCN(prices, volumes, prices[prices.length - 1]);
+        cmcResult.components = factors.components;
+        cmcResult.btc_price = factors.index_price;
+      }
+    }
+  } catch (e) {}
+
+  return cmcResult;
 }
 
 async function fetchGold() {
