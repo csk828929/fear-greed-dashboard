@@ -72,14 +72,20 @@ async function fetchGold() {
   const res = await fetch('https://onoff.markets/data/gold-fear-greed.json');
   if (!res.ok) return null;
   const d = await res.json();
-  return { source: 'onoff.markets', market: '黄金', icon: '🥇', score: Math.round(d.score * 10) / 10, label: label(d.score) };
+  const comps = d.components || {};
+  const names = { gld_price: 'GLD价格', momentum: 'RSI动量', gold_vs_spy: '黄金vs标普', dollar_index: '美元指数', real_rates: '实际利率', vix: 'VIX波动' };
+  const components = Object.entries(names).map(([k, n]) => ({ name: n, score: comps[k]?.score || 0 }));
+  return { source: 'onoff.markets', market: '黄金', icon: '🥇', score: Math.round(d.score * 10) / 10, label: label(d.score), components };
 }
 
 async function fetchUSBonds() {
   const res = await fetch('https://onoff.markets/data/bonds-fear-greed.json');
   if (!res.ok) return null;
   const d = await res.json();
-  return { source: 'onoff.markets', market: '美国国债', icon: '🇺🇸📜', score: Math.round(d.score * 10) / 10, label: label(d.score) };
+  const comps = d.components || {};
+  const names = { yield_curve: '收益率曲线', duration_risk: '久期风险', credit_quality: '信用质量', real_rates: '实际利率', bond_volatility: '债券波动', equity_vs_bonds: '股债对比' };
+  const components = Object.entries(names).map(([k, n]) => ({ name: n, score: comps[k]?.score || 0 }));
+  return { source: 'onoff.markets', market: '美国国债', icon: '🇺🇸📜', score: Math.round(d.score * 10) / 10, label: label(d.score), components };
 }
 
 async function fetchChina(market, code, name, icon) {
