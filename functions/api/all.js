@@ -1,0 +1,111 @@
+// Cloudflare Pages Function - /api/all
+export async function onRequest(context) {
+  const headers = {
+    'Access-Control-Allow-Origin': '*',
+    'Content-Type': 'application/json; charset=utf-8',
+  };
+  if (context.request.method === 'OPTIONS') return new Response(null, { status: 204, headers });
+
+  const results = await Promise.allSettled([
+    fetchCNN(), fetchCrypto(), fetchGold(), fetchUSBonds(),
+    fetchChina('ashare', 'sh000001', 'A股', '🇨🇳'),
+    fetchChina('hk', 'hkHSI', '港股', '🇭🇰'),
+    fetchChina('cnbonds', 'sh000012', '中国国债', '🇨🇳📜'),
+  ]);
+  const markets = results.map(r => r.status === 'fulfilled' && r.value ? r.value : null).filter(Boolean);
+  return new Response(JSON.stringify({ markets }), { headers });
+}
+
+// ─── Data fetchers ───
+
+async function fetchCNN() {
+  const today = new Date().toISOString().slice(0, 10);
+  const url = `https://production.dataviz.cnn.io/index/fearandgreed/graphdata/${today}`;
+  const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' } });
+  if (!res.ok) throw new Error('CNN fail');
+  const raw = await res.json();
+  const fg = raw.fear_and_greed || {};
+  return {
+    source: 'CNN', market: '美股', icon: '🇺🇸',
+    score: Math.round((fg.score || 50) * 10) / 10,
+    label: label(fg.score || 50),
+    components: [
+      { name: '标普500动量', score: raw.market_momentum_sp500?.score || 0 },
+      { name: '股价强度', score: raw.stock_price_strength?.score || 0 },
+      { name: '股价广度', score: raw.stock_price_breadth?.score || 0 },
+      { name: '看跌/看涨期权', score: raw.put_call_options?.score || 0 },
+      { name: 'VIX波动率', score: raw.market_volatility_vix?.score || 0 },
+      { name: '垃圾债券需求', score: raw.junk_bond_demand?.score || 0 },
+      { name: '避险需求', score: raw.safe_haven_demand?.score || 0 },
+    ],
+  };
+}
+
+async function fetchCrypto() {
+  const key = context.env.CMC_API_KEY || '';
+  if (!key) return null;
+  const res = await fetch('https://pro-api.coinmarketcap.com/v3/fear-and-greed/latest', {
+    headers: { 'X-CMC_PRO_API_KEY': key, Accept: 'application/json' }
+  });
+  if (!res.ok) return null;
+  const data = (await res.json()).data || {};
+  const map = { 'Extreme Fear': '极度恐惧', Fear: '恐惧', Neutral: '中性', Greed: '贪婪', 'Extreme Greed': '极度贪婪' };
+  return { source: 'CoinMarketCap', market: '加密货币', icon: '₿', score: data.value || 50, label: map[data.value_classification] || data.value_classification };
+}
+
+async function fetchGold() {
+  const res = await fetch('https://onoff.markets/data/gold-fear-greed.json');
+  if (!res.ok) return null;
+  const d = await res.json();
+  return { source: 'onoff.markets', market: '黄金', icon: '🥇', score: Math.round(d.score * 10) / 10, label: label(d.score) };
+}
+
+async function fetchUSBonds() {
+  const res = await fetch('https://onoff.markets/data/bonds-fear-greed.json');
+  if (!res.ok) return null;
+  const d = await res.json();
+  return { source: 'onoff.markets', market: '美国国债', icon: '🇺🇸📜', score: Math.round(d.score * 10) / 10, label: label(d.score) };
+}
+
+async function fetchChina(market, code, name, icon) {
+  const isSina = market === 'cnbonds';
+  const url = isSina
+    ? `https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol=${code}&scale=240&ma=no&datalen=60`
+    : `https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${code},day,,,60,qfq`;
+  const res = await fetch(url, { headers: { Referer: isSina ? 'https://finance.sina.com.cn/' : 'https://gu.qq.com/' } });
+  if (!res.ok) return null;
+
+  let prices = [], volumes = [];
+  if (isSina) {
+    const klines = await res.json();
+    prices = klines.map(k => parseFloat(k.close));
+    volumes = klines.map(k => parseFloat(k.volume) || 0);
+  } else {
+    const data = await res.json();
+    const klines = (data.data || {})[code]?.day || (data.data || {})[code]?.qfqday || [];
+    prices = klines.map(k => parseFloat(k[2]));
+    volumes = klines.map(k => parseFloat(k[5]) || 0);
+  }
+  if (prices.length < 20) return null;
+
+  return { source: isSina ? 'Sina' : 'Tencent', market: name, icon, ...computeCN(prices, volumes, prices[prices.length - 1]) };
+}
+
+function label(s) { s = s || 50; return s <= 25 ? '极度恐惧' : s <= 45 ? '恐惧' : s <= 55 ? '中性' : s <= 75 ? '贪婪' : '极度贪婪'; }
+
+function computeCN(prices, volumes, current) {
+  const ma5 = prices.slice(-5).reduce((a, b) => a + b, 0) / 5;
+  const ma20 = prices.slice(-20).reduce((a, b) => a + b, 0) / 20;
+  const ma50 = prices.slice(-50).reduce((a, b) => a + b, 0) / 50;
+  const momentum = Math.min(100, Math.max(0, 50 + (current / ma50 - 1) * 400));
+  const returns = prices.slice(1).map((p, i) => p / prices[i] - 1);
+  const rv = Math.sqrt(returns.slice(-10).reduce((a, r) => a + r * r, 0) / 10) || 0.01;
+  const hv = Math.sqrt(returns.reduce((a, r) => a + r * r, 0) / returns.length) || 0.01;
+  const vol = Math.min(100, Math.max(0, 50 - (rv / hv - 1) * 80));
+  const vma5 = volumes.slice(-5).reduce((a, b) => a + b, 0) / 5;
+  const vma20 = volumes.slice(-20).reduce((a, b) => a + b, 0) / 20 || vma5;
+  const vm = Math.min(100, Math.max(0, 50 + (vma5 / vma20 - 1) * 150));
+  const trend = Math.min(100, Math.max(0, 50 + (ma5 / ma20 - 1) * 500));
+  const score = Math.round((momentum * 0.3 + vol * 0.3 + vm * 0.2 + trend * 0.2) * 10) / 10;
+  return { score, label: label(score), index_price: Math.round(current * 100) / 100, components: { '动量': Math.round(momentum * 10) / 10, '波动率': Math.round(vol * 10) / 10, '成交量': Math.round(vm * 10) / 10, '趋势': Math.round(trend * 10) / 10 } };
+}
