@@ -154,7 +154,7 @@
 </div>
 
 <script>
-const API = '';
+const API = 'http://localhost:8899';
 const MARKETS = ['us','ashare','hk','gold','crypto','usbonds','cnbonds'];
 const NAMES = { us:'美股',ashare:'A股',hk:'港股',gold:'黄金',crypto:'加密货币',usbonds:'美国国债',cnbonds:'中国国债' };
 const ICONS = { us:'🇺🇸',ashare:'🇨🇳',hk:'🇭🇰',gold:'🥇',crypto:'₿',usbonds:'🇺🇸📜',cnbonds:'🇨🇳📜' };
@@ -194,7 +194,7 @@ function gaugeSVG(score, uid) {
 function cardHTML(market, data) {
   const s = data?.score ?? 50, l = data?.label ?? '加载中', z = zone(s);
   const detail = data?.index_name ? `${data.index_name}: ${data.index_price?.toLocaleString()}` :
-    data?.price ? `TLT: $${data.price}` : market==='us' ? 'CNN 官方 · 7项指标' : '';
+    data?.price ? (market==='usbonds' ? `TLT: $${data.price}` : `GLD: $${data.price}`) : market==='us' ? 'CNN 官方 · 7项指标' : '';
   const comps = data?.components;
   let inds = '';
   if (comps) {
@@ -250,7 +250,7 @@ async function loadChart(market, days, card) {
   const loading = card.querySelector('.chart-loading');
   loading.style.display = 'flex'; canvas.style.display = 'none';
   try {
-    const r2 = await fetch(`/api/${market}/history?days=${days}`);
+    const r2 = await fetch(`${API}/api/${market}/history?days=${days}`);
     const history = await r2.json();
     if (!history?.length) throw new Error('无数据');
     const scores = history.map(h=>h.score), dates = history.map(h=>h.date);
@@ -328,7 +328,7 @@ async function fetchAll() {
   const dot=document.getElementById('statusDot'), txt=document.getElementById('statusText');
   dot.className='status-dot'; txt.textContent='更新中...';
   try {
-    const r=await fetch(`/api/all`,{signal:AbortSignal.timeout(25000)});
+    const r=await fetch(`${API}/api/all`,{signal:AbortSignal.timeout(25000)});
     if(!r.ok) throw new Error('HTTP '+r.status);
     const res=await r.json();
     allData={};
