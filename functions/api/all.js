@@ -72,27 +72,28 @@ async function fetchCrypto(apiKey) {
     } catch (e) {}
   }
 
-  // Fetch BTC kline from Binance (works well from Workers) or CoinGecko
+  // Fetch BTC kline for factors (Kraken → Binance → CoinGecko)
   try {
     let prices = [], volumes = [];
-    // Try Binance first
-    const kr = await fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=60');
+    // Kraken public API (no key needed, works from anywhere)
+    const kr = await fetch('https://api.kraken.com/0/public/OHLC?pair=XBTUSD&interval=1440');
     if (kr.ok) {
-      const klines = await kr.json();
-      prices = klines.map(k => parseFloat(k[4]));
-      volumes = klines.map(k => parseFloat(k[5]));
-    } else {
-      // Fallback to CoinGecko
-      const cgr = await fetch('https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=60');
-      if (cgr.ok) {
-        const cg = await cgr.json();
-        prices = (cg.prices || []).map(p => p[1]);
-        volumes = (cg.total_volumes || []).map(v => v[1]);
+      const kd = await kr.json();
+      const ohlc = (kd.result?.XXBTZUSD || []).slice(-60);
+      prices = ohlc.map(k => parseFloat(k[4])); // close
+      volumes = ohlc.map(k => parseFloat(k[6])); // volume
+    }
+    if (prices.length < 20) {
+      // Binance fallback
+      const br = await fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=60');
+      if (br.ok) {
+        const klines = await br.json();
+        prices = klines.map(k => parseFloat(k[4]));
+        volumes = klines.map(k => parseFloat(k[5]));
       }
     }
     if (prices.length >= 20 && cmcResult) {
-      const factors = computeCN(prices, volumes, prices[prices.length - 1]);
-      cmcResult.components = factors.components;
+      cmcResult.components = computeCN(prices, volumes, prices[prices.length - 1]).components;
     }
   } catch (e) {}
 
