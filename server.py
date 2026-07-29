@@ -125,33 +125,41 @@ def fetch_us_fear_greed() -> dict:
     except Exception:
         pass
 
-    # Try live CNN API via curl_cffi
-        from curl_cffi import requests as curl_requests
-
+    # Try live CNN API — plain requests first (works on US servers), then curl_cffi
+    try:
         today = datetime.now().strftime("%Y-%m-%d")
         url = f"https://production.dataviz.cnn.io/index/fearandgreed/graphdata/{today}"
         headers = {
             "Accept": "application/json",
             "Origin": "https://edition.cnn.com",
             "Referer": "https://edition.cnn.com/markets/fear-and-greed",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         }
 
-        # Retry with multiple impersonation targets
         cnn_data = None
-        for target in ["chrome131", "chrome124", "firefox133", "safari18_0"]:
+
+        # 1) Try plain requests (works on US/EU servers)
+        try:
+            r = requests.get(url, headers=headers, timeout=20)
+            if r.status_code == 200:
+                cnn_data = r.json()
+        except Exception:
+            pass
+
+        # 2) Try curl_cffi TLS fingerprint (needed in China)
+        if not cnn_data:
             try:
-                r = curl_requests.get(url, headers=headers, impersonate=target, timeout=20)
-                if r.status_code == 200:
-                    cnn_data = r.json()
-                    # Update cache file on success
+                from curl_cffi import requests as curl_requests
+                for target in ["chrome131", "chrome124", "firefox133"]:
                     try:
-                        with open(cache_path, "w") as f:
-                            json.dump(cnn_data, f)
+                        r = curl_requests.get(url, headers=headers, impersonate=target, timeout=20)
+                        if r.status_code == 200:
+                            cnn_data = r.json()
+                            break
                     except Exception:
-                        pass
-                    break
+                        continue
             except Exception:
-                continue
+                pass
 
         if not cnn_data:
             raise Exception("CNN API unreachable")
