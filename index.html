@@ -154,7 +154,7 @@
 </div>
 
 <script>
-const API = 'http://localhost:8899';
+const API = location.hostname === 'localhost' ? 'http://localhost:8899' : '';
 const MARKETS = ['us','ashare','hk','gold','crypto','usbonds','cnbonds'];
 const NAMES = { us:'美股',ashare:'A股',hk:'港股',gold:'黄金',crypto:'加密货币',usbonds:'美国国债',cnbonds:'中国国债' };
 const ICONS = { us:'🇺🇸',ashare:'🇨🇳',hk:'🇭🇰',gold:'🥇',crypto:'₿',usbonds:'🇺🇸📜',cnbonds:'🇨🇳📜' };
