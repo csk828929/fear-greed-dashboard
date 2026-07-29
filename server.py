@@ -262,14 +262,24 @@ def fetch_gold_fear_greed() -> dict:
     try:
         r = requests.get("https://onoff.markets/data/gold-fear-greed.json", timeout=15)
         data = r.json()
+        raw_components = data.get("components", {})
+        gold_names = {
+            "gld_price": "GLD价格", "momentum": "RSI动量", "gold_vs_spy": "黄金vs标普",
+            "dollar_index": "美元指数", "real_rates": "实际利率", "vix": "VIX波动",
+        }
+        components = []
+        for key, name in gold_names.items():
+            c = raw_components.get(key, {})
+            if c:
+                components.append({"name": name, "score": c.get("score", 0)})
+
         result = {
             "source": "onoff.markets",
             "market": "黄金",
             "icon": "🥇",
             "score": round(data.get("score", 50), 1),
             "label": _classify(data.get("score", 50)),
-            "price": data.get("history", [{}])[-1].get("price") if data.get("history") else None,
-            "history": data.get("history", []),
+            "components": components,
             "updated": data.get("timestamp", datetime.now().isoformat()),
         }
         cache_set("gold_fng", result)
@@ -287,13 +297,24 @@ def fetch_usbonds_fear_greed() -> dict:
     try:
         r = requests.get("https://onoff.markets/data/bonds-fear-greed.json", timeout=15)
         data = r.json()
+        raw_components = data.get("components", {})
+        bond_names = {
+            "yield_curve": "收益率曲线", "duration_risk": "久期风险", "credit_quality": "信用质量",
+            "real_rates": "实际利率", "bond_volatility": "债券波动", "equity_vs_bonds": "股债对比",
+        }
+        components = []
+        for key, name in bond_names.items():
+            c = raw_components.get(key, {})
+            if c:
+                components.append({"name": name, "score": c.get("score", 0)})
+
         result = {
             "source": "onoff.markets",
             "market": "美国国债",
             "icon": "🇺🇸📜",
             "score": round(data.get("score", 50), 1),
             "label": _classify(data.get("score", 50)),
-            "price": data.get("history", [{}])[-1].get("price") if data.get("history") else None,
+            "components": components,
             "updated": data.get("timestamp", datetime.now().isoformat()),
         }
         cache_set("usbonds_fng", result)
