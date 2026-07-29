@@ -72,18 +72,27 @@ async function fetchCrypto(apiKey) {
     } catch (e) {}
   }
 
-  // Fetch BTC price history via CoinGecko for factor computation
+  // Fetch BTC kline from Binance (works well from Workers) or CoinGecko
   try {
-    const cgres = await fetch('https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=60');
-    if (cgres.ok) {
-      const cg = await cgres.json();
-      const prices = (cg.prices || []).map(p => p[1]);
-      const volumes = (cg.total_volumes || []).map(v => v[1]);
-      if (prices.length >= 20 && cmcResult) {
-        const factors = computeCN(prices, volumes, prices[prices.length - 1]);
-        cmcResult.components = factors.components;
-        cmcResult.btc_price = factors.index_price;
+    let prices = [], volumes = [];
+    // Try Binance first
+    const kr = await fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=60');
+    if (kr.ok) {
+      const klines = await kr.json();
+      prices = klines.map(k => parseFloat(k[4]));
+      volumes = klines.map(k => parseFloat(k[5]));
+    } else {
+      // Fallback to CoinGecko
+      const cgr = await fetch('https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=60');
+      if (cgr.ok) {
+        const cg = await cgr.json();
+        prices = (cg.prices || []).map(p => p[1]);
+        volumes = (cg.total_volumes || []).map(v => v[1]);
       }
+    }
+    if (prices.length >= 20 && cmcResult) {
+      const factors = computeCN(prices, volumes, prices[prices.length - 1]);
+      cmcResult.components = factors.components;
     }
   } catch (e) {}
 
