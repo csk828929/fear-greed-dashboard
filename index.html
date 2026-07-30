@@ -254,6 +254,19 @@ async function loadChart(market, days, card) {
     const r2 = await fetch(histUrl);
     const history = await r2.json();
     if (!history?.length) throw new Error('无数据');
+
+    // 强制最后一个点的分数等于仪表盘主数字，消除算法不一致问题
+    const mainScore = allData[market]?.score;
+    if (mainScore != null) {
+      const last = history[history.length - 1];
+      const today = new Date().toISOString().slice(0, 10);
+      if (last && last.date === today) {
+        last.score = mainScore;
+      } else {
+        history.push({ date: today, score: mainScore });
+      }
+    }
+
     const scores = history.map(h=>h.score), dates = history.map(h=>h.date);
     const labels = dates.map(d => {
       const dt = new Date(d);
