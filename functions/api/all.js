@@ -181,8 +181,13 @@ async function fetchChina(market, code, name, icon) {
 
   const result = { source: isSina ? 'Sina' : 'Tencent', market: name, icon, ...computeCN(prices, volumes, prices[prices.length - 1]) };
 
-  // Rename factors for bonds
-  if (market === 'cnbonds' && result.components) {
+  // Bonds: invert score (rally = fear, selloff = greed)
+  if (market === 'cnbonds') {
+    result.score = 100 - result.score;
+    result.label = label(result.score);
+  }
+
+  // Rename factors for cnbonds
     const raw = result.components;
     result.components = [
       { name: '收益变化', score: raw['动量'] || raw['收益变化'] || 0 },
