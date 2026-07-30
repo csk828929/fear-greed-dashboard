@@ -181,19 +181,39 @@ async function fetchChina(market, code, name, icon) {
 
   const result = { source: isSina ? 'Sina' : 'Tencent', market: name, icon, ...computeCN(prices, volumes, prices[prices.length - 1]) };
 
-  // Bonds: invert score (rally = fear, selloff = greed)
+  // Bonds: invert score + 6-factor rename
   if (market === 'cnbonds') {
     result.score = 100 - result.score;
     result.label = label(result.score);
-  }
+    const raw = result.components || {};
 
-  // Rename factors for cnbonds
-    const raw = result.components;
+    // Extra: stock-bond comparison & rate signal
+    let stockBond = 50, rateSignal = 50;
+    try {
+      const sr = await fetch('https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh000001,day,,,20,qfq', { headers: { Referer: 'https://gu.qq.com/' } });
+      if (sr.ok) {
+        const sd = await sr.json();
+        const sk = (sd.data || {}).sh000001?.day || (sd.data || {}).sh000001?.qfqday || [];
+        if (sk.length >= 10) {
+          const sp = sk.map(k => parseFloat(k[2]));
+          const b20 = prices.slice(-20), s20 = sp.slice(-20);
+          const bret = b20.length >= 20 ? b20[b20.length-1] / b20[0] - 1 : 0;
+          const sret = s20.length >= 20 ? s20[s20.length-1] / s20[0] - 1 : 0;
+          stockBond = Math.min(100, Math.max(0, 50 - (sret - bret) * 300));
+        }
+      }
+    } catch (e) {}
+    const ma5 = prices.slice(-5).reduce((a,b)=>a+b,0)/5;
+    const ma20 = prices.slice(-20).reduce((a,b)=>a+b,0)/20;
+    rateSignal = Math.min(100, Math.max(0, 50 + (ma5/ma20 - 1) * 400));
+
     result.components = [
-      { name: '收益变化', score: raw['动量'] || raw['收益变化'] || 0 },
-      { name: '债市波动', score: raw['波动率'] || raw['债市波动'] || 0 },
-      { name: '成交活跃', score: raw['成交量'] || raw['成交活跃'] || 0 },
-      { name: '趋势方向', score: raw['趋势'] || raw['趋势方向'] || 0 },
+      { name: '收益变化', score: raw['动量'] || 0 },
+      { name: '债市波动', score: raw['波动率'] || 0 },
+      { name: '成交活跃', score: raw['成交量'] || 0 },
+      { name: '趋势方向', score: raw['趋势'] || 0 },
+      { name: '股债对比', score: Math.round(stockBond * 10) / 10 },
+      { name: '利率信号', score: Math.round(rateSignal * 10) / 10 },
     ];
   }
   return result;
