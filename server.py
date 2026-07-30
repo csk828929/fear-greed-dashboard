@@ -396,11 +396,34 @@ def fetch_cnbonds_fear_greed() -> dict:
             sentiment["score"] = 100 - sentiment["score"]
             sentiment["label"] = _classify(sentiment["score"])
             raw = sentiment["components"]
+
+            # Extra factors: stock-bonds comparison & yield signal
+            stock_bond = 50
+            rate_signal = 50
+            try:
+                # Fetch SSE index for stock-bond comparison
+                stock_hist = _fetch_tencent_kline("sh000001", 20)
+                if stock_hist and len(stock_hist) >= 10:
+                    s_prices = [float(k[2]) for k in stock_hist]
+                    b_ret = (prices[-1] / prices[-20] - 1) if len(prices) >= 20 else 0
+                    s_ret = (s_prices[-1] / s_prices[-20] - 1) if len(s_prices) >= 20 else 0
+                    stock_bond = min(100, max(0, 50 - (s_ret - b_ret) * 300))  # stocks up vs bonds = greed
+                # Rate signal from MA divergence
+                if len(prices) >= 20:
+                    ma5 = sum(prices[-5:]) / 5
+                    ma20 = sum(prices[-20:]) / 20
+                    divergence = (ma5 / ma20 - 1)  # positive = rates falling (yields down)
+                    rate_signal = min(100, max(0, 50 + divergence * 400))
+            except Exception:
+                pass
+
             bond_factors = [
                 {"name": "收益变化", "score": raw.get("动量", 0)},
                 {"name": "债市波动", "score": raw.get("波动率", 0)},
                 {"name": "成交活跃", "score": raw.get("成交量", 0)},
                 {"name": "趋势方向", "score": raw.get("趋势", 0)},
+                {"name": "股债对比", "score": round(stock_bond, 1)},
+                {"name": "利率信号", "score": round(rate_signal, 1)},
             ]
             result = {
                 "source": "Sina Finance (国债指数)",
