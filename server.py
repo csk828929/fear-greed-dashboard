@@ -392,6 +392,9 @@ def fetch_cnbonds_fear_greed() -> dict:
             prices = [h["close"] for h in history]
             volumes = [h["volume"] for h in history]
             sentiment = _compute_sentiment(prices, volumes)
+            # Invert: bond rally = fear (flight to safety), bond selloff = greed
+            sentiment["score"] = 100 - sentiment["score"]
+            sentiment["label"] = _classify(sentiment["score"])
             raw = sentiment["components"]
             bond_factors = [
                 {"name": "收益变化", "score": raw.get("动量", 0)},
