@@ -392,6 +392,13 @@ def fetch_cnbonds_fear_greed() -> dict:
             prices = [h["close"] for h in history]
             volumes = [h["volume"] for h in history]
             sentiment = _compute_sentiment(prices, volumes)
+            raw = sentiment["components"]
+            bond_factors = [
+                {"name": "收益变化", "score": raw.get("动量", 0)},
+                {"name": "债市波动", "score": raw.get("波动率", 0)},
+                {"name": "成交活跃", "score": raw.get("成交量", 0)},
+                {"name": "趋势方向", "score": raw.get("趋势", 0)},
+            ]
             result = {
                 "source": "Sina Finance (国债指数)",
                 "market": "中国国债",
@@ -400,7 +407,7 @@ def fetch_cnbonds_fear_greed() -> dict:
                 "label": sentiment["label"],
                 "index_name": "国债指数",
                 "index_price": sentiment["index_price"],
-                "components": sentiment["components"],
+                "components": bond_factors,
                 "updated": datetime.now().isoformat(),
             }
             cache_set("cnbonds_fng", result)
