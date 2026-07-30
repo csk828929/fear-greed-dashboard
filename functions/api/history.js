@@ -22,14 +22,16 @@ export async function onRequest(context) {
 }
 
 async function fetchHistory(market, days) {
+  // crypto → Kraken BTC
+  if (market === 'crypto') return await fetchCryptoHistory(days);
+
   let klineCode, isSina = false;
   if (market === 'ashare') klineCode = 'sh000001';
   else if (market === 'hk') klineCode = 'hkHSI';
   else if (market === 'cnbonds') { klineCode = 'sh000012'; isSina = true; }
   else if (market === 'gold') klineCode = 'usGLD';
   else if (market === 'usbonds') klineCode = 'usTLT';
-  else if (market === 'us') klineCode = 'us'; // use SPY or CNN
-  else if (market === 'crypto') klineCode = 'crypto';
+  else if (market === 'us') klineCode = 'usSPY';
   else return [];
 
   let url, headersOpt = {};
@@ -41,30 +43,49 @@ async function fetchHistory(market, days) {
     headersOpt = { Referer: 'https://gu.qq.com/' };
   }
 
+  return await fetchKlineHistory(url, headersOpt, isSina, market, days);
+}
+
+async function fetchCryptoHistory(days) {
+  try {
+    const r = await fetch(`https://api.kraken.com/0/public/OHLC?pair=XBTUSD&interval=1440`);
+    if (!r.ok) return [];
+    const d = await r.json();
+    const ohlc = (d.result?.XXBTZUSD || []).slice(-(days + 20));
+    const prices = ohlc.map(k => ({ date: new Date(k[0] * 1000).toISOString().slice(0, 10), close: parseFloat(k[4]) }));
+    return computeHistoryScores(prices, market => false);
+  } catch (e) { return []; }
+}
+
+async function fetchKlineHistory(url, headersOpt, isSina, market, days) {
+async function fetchKlineHistory(url, headersOpt, isSina, market, days) {
   const res = await fetch(url, { headers: headersOpt });
   if (!res.ok) return [];
 
   let prices = [];
   if (isSina) {
     const klines = await res.json();
-    prices = klines.map(k => ({ date: k.day, score: 0, close: parseFloat(k.close) }));
+    prices = klines.map(k => ({ date: k.day, close: parseFloat(k.close) }));
   } else {
     const data = await res.json();
     const klines = (data.data || {})[klineCode]?.day || (data.data || {})[klineCode]?.qfqday || [];
-    prices = klines.map(k => ({ date: k[0], score: 0, close: parseFloat(k[2]) }));
+    prices = klines.map(k => ({ date: k[0], close: parseFloat(k[2]) }));
   }
 
-  // Compute fear-greed scores from kline data
+  return computeHistoryScores(prices, market === 'cnbonds');
+}
+
+function computeHistoryScores(prices, isInverted) {
+  const invert = typeof isInverted === 'function' ? isInverted() : isInverted;
   for (let i = 20; i < prices.length; i++) {
     const slice = prices.slice(0, i + 1);
     const ps = slice.map(p => p.close);
     const vs = slice.map(() => 1);
     const { score } = computeCN(ps, vs, ps[ps.length - 1]);
-    // Invert for cnbonds
-    prices[i].score = market === 'cnbonds' ? (100 - score) : score;
+    prices[i].score = invert ? (100 - score) : score;
   }
-  // Trim to requested days
-  return prices.slice(-days).filter(p => p.score > 0).map(p => ({ date: p.date, score: Math.round(p.score * 10) / 10 }));
+  return prices.filter(p => p.score > 0).map(p => ({ date: p.date, score: Math.round(p.score * 10) / 10 }));
+}
 }
 
 function computeCN(prices, volumes, current) {
