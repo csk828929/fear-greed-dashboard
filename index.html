@@ -250,7 +250,8 @@ async function loadChart(market, days, card) {
   const loading = card.querySelector('.chart-loading');
   loading.style.display = 'flex'; canvas.style.display = 'none';
   try {
-    const r2 = await fetch(`${API}/api/${market}/history?days=${days}`);
+    const histUrl = API ? `${API}/api/${market}/history?days=${days}` : `/api/history?market=${market}&days=${days}`;
+    const r2 = await fetch(histUrl);
     const history = await r2.json();
     if (!history?.length) throw new Error('无数据');
     const scores = history.map(h=>h.score), dates = history.map(h=>h.date);
