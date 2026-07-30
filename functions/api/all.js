@@ -179,7 +179,19 @@ async function fetchChina(market, code, name, icon) {
   }
   if (prices.length < 20) return null;
 
-  return { source: isSina ? 'Sina' : 'Tencent', market: name, icon, ...computeCN(prices, volumes, prices[prices.length - 1]) };
+  const result = { source: isSina ? 'Sina' : 'Tencent', market: name, icon, ...computeCN(prices, volumes, prices[prices.length - 1]) };
+
+  // Rename factors for bonds
+  if (market === 'cnbonds' && result.components) {
+    const raw = result.components;
+    result.components = [
+      { name: '收益变化', score: raw['动量'] || raw['收益变化'] || 0 },
+      { name: '债市波动', score: raw['波动率'] || raw['债市波动'] || 0 },
+      { name: '成交活跃', score: raw['成交量'] || raw['成交活跃'] || 0 },
+      { name: '趋势方向', score: raw['趋势'] || raw['趋势方向'] || 0 },
+    ];
+  }
+  return result;
 }
 
 function label(s) { s = s || 50; return s <= 25 ? '极度恐惧' : s <= 45 ? '恐惧' : s <= 55 ? '中性' : s <= 75 ? '贪婪' : '极度贪婪'; }
