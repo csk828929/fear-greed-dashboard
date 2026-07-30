@@ -277,33 +277,48 @@ def fetch_crypto_fear_greed() -> dict:
 
 # ─── Gold ───
 
+def _compute_from_etf(code: str) -> dict:
+    """Compute fear-greed from US ETF kline via Tencent"""
+    url = f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={code},day,,,60,qfq"
+    headers = {"Referer": "https://gu.qq.com/"}
+    r = requests.get(url, headers=headers, timeout=15)
+    r.raise_for_status()
+    data = r.json()
+    klines = (data.get("data", {}).get(code, {}).get("day") or
+              data.get("data", {}).get(code, {}).get("qfqday") or [])
+    if len(klines) < 20:
+        raise ValueError(f"Not enough kline data for {code}")
+    prices = [float(k[2]) for k in klines]
+    volumes = [float(k[5]) for k in klines]
+    return _compute_sentiment(prices, volumes)
+
+
 def fetch_gold_fear_greed() -> dict:
     cached = cache_get("gold_fng")
     if cached:
         return cached
     try:
-        r = requests.get("https://onoff.markets/data/gold-fear-greed.json", timeout=15)
-        data = r.json()
-        raw_components = data.get("components", {})
-        gold_names = {
-            "gld_price": "GLD价格", "momentum": "RSI动量", "gold_vs_spy": "黄金vs标普",
-            "dollar_index": "美元指数", "real_rates": "实际利率", "vix": "VIX波动",
-        }
-        components = []
-        for key, name in gold_names.items():
-            c = raw_components.get(key, {})
-            if c:
-                components.append({"name": name, "score": c.get("score", 0)})
-
+        factors = _compute_from_etf("usGLD")
+        score = factors["score"]
         result = {
-            "source": "onoff.markets",
+            "source": "Tencent (GLD实时)",
             "market": "黄金",
             "icon": "🥇",
-            "score": round(data.get("score", 50), 1),
-            "label": _classify(data.get("score", 50)),
-            "components": components,
-            "updated": data.get("timestamp", datetime.now().isoformat()),
+            "score": score,
+            "label": _classify(score),
+            "index_name": "GLD",
+            "index_price": factors.get("index_price", 0),
         }
+        # Try onoff.markets for detailed components
+        try:
+            or2 = requests.get("https://onoff.markets/data/gold-fear-greed.json", timeout=10)
+            if or2.status_code == 200:
+                od = or2.json()
+                gold_names = {"gld_price": "GLD价格", "momentum": "RSI动量", "gold_vs_spy": "黄金vs标普",
+                              "dollar_index": "美元指数", "real_rates": "实际利率", "vix": "VIX波动"}
+                result["components"] = [{"name": n, "score": od.get("components", {}).get(k, {}).get("score", 0)} for k, n in gold_names.items()]
+        except Exception:
+            result["components"] = factors.get("components", {})
         cache_set("gold_fng", result)
         return result
     except Exception as e:
@@ -317,28 +332,27 @@ def fetch_usbonds_fear_greed() -> dict:
     if cached:
         return cached
     try:
-        r = requests.get("https://onoff.markets/data/bonds-fear-greed.json", timeout=15)
-        data = r.json()
-        raw_components = data.get("components", {})
-        bond_names = {
-            "yield_curve": "收益率曲线", "duration_risk": "久期风险", "credit_quality": "信用质量",
-            "real_rates": "实际利率", "bond_volatility": "债券波动", "equity_vs_bonds": "股债对比",
-        }
-        components = []
-        for key, name in bond_names.items():
-            c = raw_components.get(key, {})
-            if c:
-                components.append({"name": name, "score": c.get("score", 0)})
-
+        factors = _compute_from_etf("usTLT")
+        score = factors["score"]
         result = {
-            "source": "onoff.markets",
+            "source": "Tencent (TLT实时)",
             "market": "美国国债",
             "icon": "🇺🇸📜",
-            "score": round(data.get("score", 50), 1),
-            "label": _classify(data.get("score", 50)),
-            "components": components,
-            "updated": data.get("timestamp", datetime.now().isoformat()),
+            "score": score,
+            "label": _classify(score),
+            "index_name": "TLT",
+            "index_price": factors.get("index_price", 0),
         }
+        # Try onoff.markets for detailed components
+        try:
+            or2 = requests.get("https://onoff.markets/data/bonds-fear-greed.json", timeout=10)
+            if or2.status_code == 200:
+                od = or2.json()
+                bond_names = {"yield_curve": "收益率曲线", "duration_risk": "久期风险", "credit_quality": "信用质量",
+                              "real_rates": "实际利率", "bond_volatility": "债券波动", "equity_vs_bonds": "股债对比"}
+                result["components"] = [{"name": n, "score": od.get("components", {}).get(k, {}).get("score", 0)} for k, n in bond_names.items()]
+        except Exception:
+            result["components"] = factors.get("components", {})
         cache_set("usbonds_fng", result)
         return result
     except Exception as e:
